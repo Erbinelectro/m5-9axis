@@ -1,9 +1,3 @@
-// define must ahead #include <M5Stack.h>
-#define M5STACK_MPU6886 
-// #define M5STACK_MPU9250 
-// #define M5STACK_MPU6050
-// #define M5STACK_200Q
-
 #include <Arduino.h>
 #include "Preferences.h"
 #include "M5Stack.h"
@@ -18,10 +12,9 @@
 Preferences prefs;
 
 struct bmm150_dev dev;
-bmm150_mag_data mag_offset; // Compensation magnetometer float data storage 储存补偿磁强计浮子数据
+bmm150_mag_data mag_offset;
 bmm150_mag_data mag_max;
 bmm150_mag_data mag_min;
-TFT_eSprite img = TFT_eSprite(&M5.Lcd);
 
 const int sampleFreq = 1000;
 
@@ -85,13 +78,13 @@ int8_t bmm150_initialization(){
     return rslt;
 }
 
-void bmm150_offset_save(){  //Store the data.  存储bmm150的数据
+void bmm150_offset_save(){
     prefs.begin("bmm150", false);
     prefs.putBytes("offset", (uint8_t *)&mag_offset, sizeof(bmm150_mag_data));
     prefs.end();
 }
 
-void bmm150_offset_load(){  //load the data.  加载bmm150的数据
+void bmm150_offset_load(){
     if(prefs.begin("bmm150", true)){
         prefs.getBytes("offset", (uint8_t *)&mag_offset, sizeof(bmm150_mag_data));
         prefs.end();
@@ -102,20 +95,20 @@ void bmm150_offset_load(){  //load the data.  加载bmm150的数据
 }
 
 void setup() {
-    M5.begin(true, false, true, false); //Init M5Core(Initialize LCD, serial port).  初始化 M5Core（初始化LCD、串口）
-    M5.Power.begin();   //Init Power module.  初始化电源设置
-    Wire.begin(21, 22, 400000); //Set the frequency of the SDA SCL.  设置SDA和SCL的频率
+    M5.begin(true, false, true, false);
+    M5.Power.begin();
+    Wire.begin(21, 22, 400000);
 
     M5.Lcd.fillScreen(BLACK);
     M5.Lcd.setTextColor(WHITE , BLACK);
     M5.Lcd.setTextSize(2);
 
     if(bmm150_initialization() != BMM150_OK){
-        img.fillSprite(0);  //Fill the whole sprite with defined colour.  用定义的颜色填充整个Sprite图
-        img.drawCentreString("BMM150 init failed", 160, 110, 4);    //Use font 4 in (160,110)draw string.  使用字体4在(160,110)处绘制字符串
-        img.pushSprite(0, 0);   //Push the sprite to the TFT at 0, 0.  将Sprite图打印在(0,0)处
+        M5.Lcd.fillScreen(BLACK);
+        M5.Lcd.setCursor(0,110);
+        M5.Lcd.print("BMM150 init failed");
         for(;;){
-            delay(100); //delay 100ms.  延迟100ms
+            delay(100);
         }
     }
 
@@ -128,15 +121,15 @@ void setup() {
     microsPrevious = micros();
 }
 
-void bmm150_calibrate(uint32_t calibrate_time){ //bbm150 data calibrate.  bbm150数据校准
+void bmm150_calibrate(uint32_t calibrate_time){
     uint32_t calibrate_timeout = 0;
 
     calibrate_timeout = millis() + calibrate_time;
-    Serial.printf("Go calibrate, use %d ms \r\n", calibrate_time);  //The serial port outputs formatting characters.  串口输出格式化字符
+    Serial.printf("Go calibrate, use %d ms \r\n", calibrate_time);
     Serial.printf("running ...");
 
     while (calibrate_timeout > millis()){
-        bmm150_read_mag_data(&dev); //read the magnetometer data from registers.  从寄存器读取磁力计数据
+        bmm150_read_mag_data(&dev);
         if(dev.data.x){
             mag_min.x = (dev.data.x < mag_min.x) ? dev.data.x : mag_min.x;
             mag_max.x = (dev.data.x > mag_max.x) ? dev.data.x : mag_max.x;
@@ -165,7 +158,7 @@ void bmm150_calibrate(uint32_t calibrate_time){ //bbm150 data calibrate.  bbm150
 
 void loop() {
     char text_string[100];
-    M5.update();    //Read the press state of the key.  读取按键的状态
+    M5.update();
     bmm150_read_mag_data(&dev);
     float head_dir = atan2(dev.data.x -  mag_offset.x, dev.data.y - mag_offset.y) * 180.0 / M_PI;
     Serial.printf("MID X : %.2f \t MID Y : %.2f \t MID Z : %.2f \n", mag_offset.x, mag_offset.y, mag_offset.z);
@@ -200,6 +193,7 @@ void loop() {
         
         mpu.getTempData(&temp);
 
+        
         filter.update(gyroX, gyroY, gyroZ, accX, accY, accZ, magX, magY, magZ);
 
         roll    = filter.getRoll();
