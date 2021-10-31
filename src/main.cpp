@@ -103,12 +103,12 @@ void setup() {
     M5.Lcd.setTextColor(WHITE , BLACK);
     M5.Lcd.setTextSize(2);
 
-
     if (mpu.Init() != 0) {
         M5.Lcd.print("cannnot find MPU6886");
         exit(0);
     }
-
+    Serial.printf("0x%x\r\n",mpu.imuId);
+    
     if(bmm150_initialization() != BMM150_OK){
         M5.Lcd.print("BMM150 init failed");
         exit(0);
@@ -161,7 +161,7 @@ void loop() {
     M5.update();
     bmm150_read_mag_data(&dev);
     float head_dir = atan2(dev.data.x -  mag_offset.x, dev.data.y - mag_offset.y) * 180.0 / M_PI;
-    Serial.printf("MID X : %.2f \t MID Y : %.2f \t MID Z : %.2f \n", mag_offset.x, mag_offset.y, mag_offset.z);
+    //Serial.printf("MID X : %.2f \t MID Y : %.2f \t MID Z : %.2f \n", mag_offset.x, mag_offset.y, mag_offset.z);
 
     /*
     M5.Lcd.setCursor(0, 0);
@@ -206,6 +206,8 @@ void loop() {
         M5.Lcd.printf("PITCH : %.2f", pitch);
         M5.Lcd.setCursor(0, 30);
         M5.Lcd.printf("YAW   : %.2f", yaw);
+
+        microsPrevious += microsPerReading;
     }
 
     delay(1000 / sampleFreq);
