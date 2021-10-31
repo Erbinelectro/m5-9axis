@@ -103,18 +103,18 @@ void setup() {
     M5.Lcd.setTextColor(WHITE , BLACK);
     M5.Lcd.setTextSize(2);
 
+
+    if (mpu.Init() != 0) {
+        M5.Lcd.print("cannnot find MPU6886");
+        exit(0);
+    }
+
     if(bmm150_initialization() != BMM150_OK){
-        M5.Lcd.fillScreen(BLACK);
-        M5.Lcd.setCursor(0,110);
         M5.Lcd.print("BMM150 init failed");
-        for(;;){
-            delay(100);
-        }
+        exit(0);
     }
 
     bmm150_offset_load();
-    
-    mpu.Init();
   
     filter.begin(sampleFreq);
     microsPerReading = 1000000 / sampleFreq;
