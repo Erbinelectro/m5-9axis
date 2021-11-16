@@ -1,3 +1,5 @@
+#define M5STACK_MPU6886
+
 #include <Arduino.h>
 #include "Preferences.h"
 #include "M5Stack.h"
@@ -9,29 +11,37 @@
 
 #define M_PI 3.141592
 
+// for magnet
 Preferences prefs;
-
 struct bmm150_dev dev;
 bmm150_mag_data mag_offset;
 bmm150_mag_data mag_max;
 bmm150_mag_data mag_min;
 
-const int sampleFreq = 1000;
+const float sampleFreq = 1000.0f;// bmm150 ssample code was setted 512Hz
 
-float accX, accY, accZ;
-float gyroX, gyroY, gyroZ;
-float magX, magY, magZ;
-float temp;
+// for imu
+float accX[2] = {};  //[0] -> comtemporary data box, [1] -> old data box
+float accY[2] = {};
+float accZ[2] = {};
+
+float gyroX[2] = {};
+float gyroY[2] = {};
+float gyroZ[2] = {};
 
 float pitch = 0.0F;
 float roll  = 0.0F;
 float yaw   = 0.0F;
 
-MPU6886 mpu;
+float temp = 0.0F;
 
+// for madgwick filter
 Madgwick filter;
 unsigned long microsPerReading, microsPrevious;
 float accelScale, gyroScale;
+
+// for RC low pass filter
+float a = 0.9;//1/(2 * M_PI * sampleFreq * (1 / sampleFreq) + 1);
 
 int8_t i2c_read(uint8_t dev_id, uint8_t reg_addr, uint8_t *read_data, uint16_t len){
     if(M5.I2C.readBytes(dev_id, reg_addr, len, read_data)){ // Check whether the device ID, address, data exist.
@@ -94,33 +104,6 @@ void bmm150_offset_load(){
     }
 }
 
-void setup() {
-    M5.begin(true, false, true, false);
-    M5.Power.begin();
-    Wire.begin(21, 22, 400000);
-
-    M5.Lcd.fillScreen(BLACK);
-    M5.Lcd.setTextColor(WHITE , BLACK);
-    M5.Lcd.setTextSize(2);
-
-    if (mpu.Init() != 0) {
-        M5.Lcd.print("cannnot find MPU6886");
-        exit(0);
-    }
-    Serial.printf("0x%x\r\n",mpu.imuId);
-    
-    if(bmm150_initialization() != BMM150_OK){
-        M5.Lcd.print("BMM150 init failed");
-        exit(0);
-    }
-
-    bmm150_offset_load();
-  
-    filter.begin(sampleFreq);
-    microsPerReading = 1000000 / sampleFreq;
-    microsPrevious = micros();
-}
-
 void bmm150_calibrate(uint32_t calibrate_time){
     uint32_t calibrate_timeout = 0;
 
@@ -156,12 +139,50 @@ void bmm150_calibrate(uint32_t calibrate_time){
     Serial.printf("z_max: %.2f z_min: %.2f \r\n", mag_max.z, mag_min.z);
 }
 
+void setup() {
+
+    M5.begin(true, false, true, false);
+    M5.Power.begin();
+    M5.IMU.Init();
+    Wire.begin(21, 22, 400000);
+
+    M5.Lcd.fillScreen(BLACK);
+    M5.Lcd.setTextColor(GREEN , BLACK);
+    M5.Lcd.setTextSize(2);
+
+    if (M5.IMU.Init() != 0) {
+        M5.Lcd.print("cannnot find MPU6886");
+        exit(0);
+    }
+    Serial.printf("0x%x\r\n",M5.IMU.imuId);
+    
+    if(bmm150_initialization() != BMM150_OK){
+        M5.Lcd.print("BMM150 init failed");
+        exit(0);
+    }
+
+    bmm150_offset_load();
+  
+    filter.begin(sampleFreq);
+    microsPerReading = 1000000 / sampleFreq;
+    microsPrevious = micros();
+}
+
 void loop() {
     char text_string[100];
+    float magX, magY, magZ;
+
     M5.update();
     bmm150_read_mag_data(&dev);
-    float head_dir = atan2(dev.data.x -  mag_offset.x, dev.data.y - mag_offset.y) * 180.0 / M_PI;
+    magX = dev.data.x -  mag_offset.x;
+    magY = dev.data.y - mag_offset.y;
+    float head_dir = atan2(magX, magY) * 180.0 / M_PI;
     //Serial.printf("MID X : %.2f \t MID Y : %.2f \t MID Z : %.2f \n", mag_offset.x, mag_offset.y, mag_offset.z);
+
+    M5.IMU.getGyroData(&gyroX[0],&gyroY[0],&gyroZ[0]);
+    M5.IMU.getAccelData(&accX[0],&accY[0],&accZ[0]);
+    M5.IMU.getAhrsData(&pitch,&roll,&yaw);
+    M5.IMU.getTempData(&temp);
 
     /*
     M5.Lcd.setCursor(0, 0);
@@ -182,19 +203,21 @@ void loop() {
         M5.Lcd.print("Flip + rotate core calibration");
         
         bmm150_calibrate(10000);
+
+        M5.Lcd.fillScreen(BLACK);
     }
 
-    unsigned long microsNow;
-
-    if (microsNow - microsPrevious >= microsPerReading)
+    if (micros() - microsPrevious >= microsPerReading)
     {
-        mpu.getAccelData(&accX, &accY, &accZ);
-        mpu.getGyroData(&gyroX, &gyroY, &gyroZ);
-        
-        mpu.getTempData(&temp);
+        gyroX[0] = a * gyroX[1] + (1-a) * gyroX[0];
+        gyroY[0] = a * gyroY[1] + (1-a) * gyroY[0];
+        gyroZ[0] = a * gyroZ[1] + (1-a) * gyroZ[0];
 
-        
-        filter.update(gyroX, gyroY, gyroZ, accX, accY, accZ, magX, magY, magZ);
+        accX[0] = a * accX[1] + (1-a) * accX[0];
+        accY[0] = a * accY[1] + (1-a) * accY[0];
+        accZ[0] = a * accZ[1] + (1-a) * accZ[0];
+
+        filter.update(gyroX[0], gyroY[0], gyroZ[0], accX[0], accY[0], accZ[0], magX, magY, magZ);
 
         roll    = filter.getRoll();
         pitch   = filter.getPitch();
@@ -210,5 +233,5 @@ void loop() {
         microsPrevious += microsPerReading;
     }
 
-    delay(1000 / sampleFreq);
+    delay(1000.0f / sampleFreq);
 }
