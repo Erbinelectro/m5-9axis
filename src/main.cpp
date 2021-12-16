@@ -41,7 +41,7 @@ unsigned long microsPerReading, microsPrevious;
 float accelScale, gyroScale;
 
 // for RC low pass filter
-float a = 0.9;//1/(2 * M_PI * sampleFreq * (1 / sampleFreq) + 1);
+float a = 0.01;//1/(2 * M_PI * sampleFreq * (1 / sampleFreq) + 1);
 
 int8_t i2c_read(uint8_t dev_id, uint8_t reg_addr, uint8_t *read_data, uint16_t len){
     if(M5.I2C.readBytes(dev_id, reg_addr, len, read_data)){ // Check whether the device ID, address, data exist.
@@ -176,6 +176,7 @@ void loop() {
     bmm150_read_mag_data(&dev);
     magX = dev.data.x -  mag_offset.x;
     magY = dev.data.y - mag_offset.y;
+    magZ = dev.data.z -  mag_offset.z;
     float head_dir = atan2(magX, magY) * 180.0 / M_PI;
     //Serial.printf("MID X : %.2f \t MID Y : %.2f \t MID Z : %.2f \n", mag_offset.x, mag_offset.y, mag_offset.z);
 
